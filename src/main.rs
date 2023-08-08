@@ -1,5 +1,6 @@
 mod gen_server;
 mod ws_client;
+mod line;
 
 use axum::{
     extract::{
@@ -11,20 +12,15 @@ use axum::{
     Router,
     Extension
 };
+use axum::extract::connect_info::ConnectInfo;
 use std::{net::SocketAddr, path::PathBuf};
 use tower_http::{
     services::ServeDir,
     trace::{DefaultMakeSpan, TraceLayer},
 };
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
-use axum::extract::connect_info::ConnectInfo;
-
-use std::sync::Arc;
-use tokio::sync::{
-    mpsc:: { self, Sender, Receiver },
-    Mutex
-};
-use gen_server::{State,GSMsg,gen_server};
+use tokio::sync::mpsc::Sender;
+use gen_server::GSMsg;
 
 const LISTEN_ON : &str = "0.0.0.0:3000";
 
@@ -38,25 +34,19 @@ async fn main() {
         )
         .with(tracing_subscriber::fmt::layer())
         .init();
-    
-    let assets_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets");
 
-    let (gs_tx, gs_rx) : (Sender<GSMsg>, Receiver<GSMsg>) = mpsc::channel(32);
-    
-    let state = Arc::new(Mutex::new(State { gs_tx }));
-    
-    tokio::spawn(gen_server(gs_rx));
+    let gs_tx = gen_server::spawn(); 
+
+    let assets_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("pub");
     
     let app = Router::new()
         .fallback_service(ServeDir::new(assets_dir)
 			  .append_index_html_on_directories(true))
         .route("/ws", get(ws_handler))	
-	.layer(Extension(state))
-        .layer(
-            TraceLayer::new_for_http()
-                .make_span_with(DefaultMakeSpan::default()
-				.include_headers(false)),
-        );
+	.layer(Extension(gs_tx))
+        .layer(TraceLayer::new_for_http()
+               .make_span_with(DefaultMakeSpan::default()
+			       .include_headers(false)));
         
     let addr : SocketAddr = LISTEN_ON.parse().unwrap();
     
@@ -69,7 +59,7 @@ async fn main() {
 
 async fn ws_handler(
     ws: WebSocketUpgrade,
-    Extension(state): Extension<Arc<Mutex<State>>>,
+    Extension(gs_tx): Extension<Sender<GSMsg>>,
     user_agent: Option<TypedHeader<axum::headers::UserAgent>>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
 ) -> impl IntoResponse {
@@ -78,9 +68,6 @@ async fn ws_handler(
     } else {
         String::from("Unknown browser")
     };
-    tracing::info!("`{user_agent}` at {addr} connected.");
-    // finalize the upgrade process by returning upgrade callback.
-    // we can customize the callback by sending additional info such as address.
-    ws.on_upgrade(move |socket| ws_client::handle_socket(socket, addr, state))
+    tracing::info!("{addr} connected [{user_agent}].");
+    ws.on_upgrade(move |socket| ws_client::handle_socket(socket, addr, gs_tx))
 }
-
