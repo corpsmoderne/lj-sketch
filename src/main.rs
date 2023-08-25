@@ -27,11 +27,8 @@ const LISTEN_ON : &str = "0.0.0.0:3000";
 #[tokio::main]
 async fn main() {
     tracing_subscriber::registry()
-        .with(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "lj_sketch=info,tower_http=info"
-				.into()),
-        )
+        .with(tracing_subscriber::EnvFilter::try_from_default_env()
+              .unwrap_or_else(|_| "lj_sketch=info,tower_http=info".into()))
         .with(tracing_subscriber::fmt::layer())
         .init();
 

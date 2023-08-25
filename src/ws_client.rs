@@ -1,10 +1,10 @@
-use axum::extract::ws::{ Message, Message::Text, Message::Close, WebSocket };
+use axum::extract::ws::{Message, Message::Text, Message::Close, WebSocket};
 use std::net::SocketAddr;
 use tokio::sync::mpsc::{self, Sender};
-use serde::{Serialize,Deserialize};
-use  core::ops::ControlFlow;
+use serde::{Serialize, Deserialize};
+use core::ops::ControlFlow;
 use crate::gen_server::GSMsg;
-use crate::line::{Line,simplify_line};
+use crate::line::{Line, simplify_line};
 		  
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(tag = "t")]
@@ -26,8 +26,8 @@ pub async fn handle_socket(
     who: SocketAddr,
     gs_tx: Sender<GSMsg>
 ) {
-    let (c_tx, mut c_rx) = mpsc::channel(32); 
-    gs_tx.send(GSMsg::NewClient((who, c_tx))).await.unwrap();
+    let (chan_tx, mut chan_rx) = mpsc::channel(32); 
+    gs_tx.send(GSMsg::NewClient((who, chan_tx))).await.unwrap();
     let mut line : Line = vec![];
 
     loop {
@@ -42,7 +42,7 @@ pub async fn handle_socket(
 		    ControlFlow::Continue(()) => {}
 		}
 	    },
-	    Some(msg) = c_rx.recv() => {
+	    Some(msg) = chan_rx.recv() => {
 		process_gs_msg(&mut socket, &who, msg).await
 	    },
 	    else => {
@@ -53,7 +53,11 @@ pub async fn handle_socket(
     }
 }
 
-async fn process_gs_msg(socket: &mut WebSocket, who: &SocketAddr, msg: GSMsg) {
+async fn process_gs_msg(
+    socket: &mut WebSocket,
+    who: &SocketAddr,
+    msg: GSMsg
+) {
     match msg {
 	GSMsg::NewLine(line) => {
 	    socket.send(Message::Text(line_to_json(&line))).await.unwrap();
@@ -75,32 +79,30 @@ async fn process_ws_msg(
     msg: Message
 ) -> ControlFlow<(),()> {
     match msg {
-	Text(text) => {
-	    match serde_json::from_str(&text) {
-		Ok(json) => {
-		    tracing::debug!("{who}: '{:?}'", json);
-		    match handle_ws_msg(line, json) {
-			Ok(Some(req)) => gs_tx.send(req).await.unwrap(),
-			Ok(None) => {},
-			Err(err) => {
-			    tracing::warn!("{who}: message error: {err}");
-			}
+	Text(text) => match serde_json::from_str(&text) {
+	    Ok(json) => {
+		tracing::debug!("{who}: '{json:?}'");
+		match handle_ws_msg(line, json) {
+		    Ok(Some(req)) => gs_tx.send(req).await.unwrap(),
+		    Ok(None) => {},
+		    Err(err) => {
+			tracing::warn!("{who}: message error: {err}");
 		    }
-		},
-		Err(err) => {
-		    tracing::warn!("{who}: can't parse JSON: {err}");
 		}
+	    },
+	    Err(err) => {
+		tracing::warn!("{who}: can't parse JSON: {err}");
 	    }
 	},
 	Close(close) => {
-	    tracing::info!("{who}: closing: {:?}", close);
+	    tracing::info!("{who}: closing: {close:?}");
 	    gs_tx.send(GSMsg::DeleteClient(*who)).await.unwrap();
 	    return ControlFlow::Break(());
 	},
 	_ => {
-	    tracing::warn!("{who}: can't handle message: {:?}", msg);
+	    tracing::warn!("{who}: can't handle message: {msg:?}");
 	}
-    }
+    };
     ControlFlow::Continue(())
 }
 
@@ -121,13 +123,13 @@ fn handle_ws_msg(
 	},
 	JMsg::Stroke => {
 	    if line.len() > 1 {
-		let line2 = simplify_line(line);
+		let simple_line = simplify_line(line);
 		*line = vec![];		
-		return Ok(Some(GSMsg::NewLine(line2)));
+		return Ok(Some(GSMsg::NewLine(simple_line)));
 	    }
 	},
 	JMsg::Line{..} => {
-	    tracing::warn!("recieved a line message O_o");
+	    return Err("recieved a line message O_o");
 	}
     };
     Ok(None)
@@ -135,9 +137,7 @@ fn handle_ws_msg(
 
 fn line_to_json(line: &Line) -> String {
     let line = line.iter()
-	.map(| (x, y, c) | {
-	    (*x, *y, format!("#{:06x}", c))
-	})
+	.map(| (x, y, c) | (*x, *y, format!("#{:06x}", c)))
 	.collect();    
     serde_json::to_string(&JMsg::Line{ line }).unwrap()
 }

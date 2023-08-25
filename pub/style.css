@@ -64,3 +64,20 @@ body {
     text-align: center;
 }
 
+#errorBox {
+    border: thick solid #990000;
+    background: #dd0000;
+    position: fixed;
+    bottom: 0px;
+    right: 0px;
+    text-align: center;
+    padding: 1em;
+    font-size: x-large;
+}
+
+.visible {
+    display: block;
+}
+.invisible {
+    display: none;
+}

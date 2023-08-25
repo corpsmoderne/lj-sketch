@@ -108,13 +108,22 @@ const initDrawing = (canvas, clearButton, selectedColor, ws) => {
     });
 };
 
-
-const initWs = () => {
+const initWs = errorBox => {
     const socket = new WebSocket('ws://localhost:3000/ws');
 
     socket.addEventListener('open', function (event) {
+	console.log("Open", event);
     });
-    
+    socket.addEventListener('error', function (event) {
+	console.log("Error:", event);
+	errorBox.className = "visible";
+	errorBox.innerHTML = "Error: " + event.message;
+    });
+    socket.addEventListener("close", (event) => {
+	console.log("Close:", event);
+	errorBox.className = "visible";
+	errorBox.innerHTML = "Disconnected: server closed connexion";
+    });
     return socket;
 };
 
@@ -122,9 +131,9 @@ window.onload = () => {
     const colorsDiv = document.querySelector("#colors");
     const selectedColor = document.querySelector("#selectedColor");
     const clearButton = document.querySelector("#clearButton");
+    const errorBox = document.querySelector("#errorBox");
     const canvas = document.querySelector("#canvas");
     initUI(colorsDiv, selectedColor);
-    let ws = initWs();
+    let ws = initWs(errorBox);
     initDrawing(canvas, clearButton, selectedColor, ws);
-    
 };

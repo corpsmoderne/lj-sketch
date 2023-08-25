@@ -25,8 +25,7 @@ async fn gen_server(mut rx: Receiver<GSMsg>) {
 	match msg {
 	    GSMsg::NewClient((addr, c_tx)) => {
 		for line in &lines {
-		    c_tx.send(GSMsg::NewLine(line.clone()))
-			.await.unwrap();
+		    c_tx.send(GSMsg::NewLine(line.clone())).await.unwrap();
 		}
 		clients.insert(addr, c_tx);		
 		tracing::info!("NewClient {addr}");
