@@ -25,7 +25,10 @@ async fn gen_server(mut rx: Receiver<GSMsg>) {
 	match msg {
 	    GSMsg::NewClient((addr, c_tx)) => {
 		for line in &lines {
-		    c_tx.send(GSMsg::NewLine(line.clone())).await.unwrap();
+		    let ret = c_tx.send(GSMsg::NewLine(line.clone())).await;
+		    if let Err(err) = ret {
+			tracing::warn!("Client {addr} send error: {err}");
+		    }
 		}
 		clients.insert(addr, c_tx);		
 		tracing::info!("NewClient {addr}");
@@ -53,11 +56,9 @@ async fn send_all(
     let mut to_remove : Vec<SocketAddr> = vec![];
     
     for (addr, ref mut tx) in clients.iter() {
-	let ret = tx
-	    .send(msg.clone())
-	    .await;
-	if ret.is_err() {
-	    tracing::warn!("Client {addr} abruptly disconnected");
+	let ret = tx.send(msg.clone()).await;
+	if let Err(err) = ret {	    
+	    tracing::warn!("Client {addr} abruptly disconnected: {err}");
 	    to_remove.push(*addr);
 	}
     }

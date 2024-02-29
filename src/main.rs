@@ -25,9 +25,10 @@ use gen_server::GSMsg;
 const LISTEN_ON : &str = "0.0.0.0:3000";
 
 #[tokio::main]
-async fn main() {
+async fn main() -> anyhow::Result<()> {
     tracing_subscriber::registry()
-        .with(tracing_subscriber::EnvFilter::try_from_default_env()
+    //.with(tracing_subscriber::EnvFilter::try_from_default_env()
+	.with(tracing_subscriber::EnvFilter::try_from_env("LJ_SKETCH")
               .unwrap_or_else(|_| "lj_sketch=info,tower_http=info".into()))
         .with(tracing_subscriber::fmt::layer())
         .init();
@@ -45,13 +46,12 @@ async fn main() {
                .make_span_with(DefaultMakeSpan::default()
 			       .include_headers(false)));
         
-    let addr : SocketAddr = LISTEN_ON.parse().unwrap();
-    
-    tracing::info!("listening on {}", addr);
+    let addr : SocketAddr = LISTEN_ON.parse()?;
+    tracing::info!("listening on {}", addr);    
     axum::Server::bind(&addr)
         .serve(app.into_make_service_with_connect_info::<SocketAddr>())
-        .await
-        .unwrap();
+        .await?;
+    Ok(())
 }
 
 async fn ws_handler(

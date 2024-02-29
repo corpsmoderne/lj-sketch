@@ -55,7 +55,7 @@ const updateCanvas = (canvas, ctx, lines) => {
     }
 };
 
-const initDrawing = (canvas, clearButton, selectedColor, ws) => {
+const initDrawing = (canvas, clearButton, errButton, selectedColor, ws) => {
     const ctx = canvas.getContext("2d");
     ctx.lineWidth = 2;
     let lines = [];
@@ -68,10 +68,14 @@ const initDrawing = (canvas, clearButton, selectedColor, ws) => {
     resetCanvas();
     
     clearButton.onclick = evt => {
-	lines = [];
-	resetCanvas();
 	ws.send(JSON.stringify({ t: "clear" }));
     };
+
+    if (errButton) {
+	errButton.onclick = evt => {
+	    ws.send(JSON.stringify({ t: "error", msg: "this is an error" }));
+	};
+    }
     
     canvas.addEventListener("mousedown", evt => {
 	const pt = getMousePoint(canvas, evt, selectedColor.value);
@@ -89,7 +93,7 @@ const initDrawing = (canvas, clearButton, selectedColor, ws) => {
     });
 
     canvas.addEventListener("mouseup", evt => {
-	console.log(currentLine);
+	// console.log(currentLine);
 	currentLine = null;
 	ws.send(JSON.stringify({ t: "stroke"})); 
     });
@@ -109,7 +113,7 @@ const initDrawing = (canvas, clearButton, selectedColor, ws) => {
 };
 
 const initWs = errorBox => {
-    const socket = new WebSocket('ws://localhost:3000/ws');
+    const socket = new WebSocket('ws://'+ location.host + '/ws');
 
     socket.addEventListener('open', function (event) {
 	console.log("Open", event);
@@ -131,9 +135,10 @@ window.onload = () => {
     const colorsDiv = document.querySelector("#colors");
     const selectedColor = document.querySelector("#selectedColor");
     const clearButton = document.querySelector("#clearButton");
+    const errButton = document.querySelector("#errButton");
     const errorBox = document.querySelector("#errorBox");
     const canvas = document.querySelector("#canvas");
     initUI(colorsDiv, selectedColor);
     let ws = initWs(errorBox);
-    initDrawing(canvas, clearButton, selectedColor, ws);
+    initDrawing(canvas, clearButton, errButton, selectedColor, ws);
 };
